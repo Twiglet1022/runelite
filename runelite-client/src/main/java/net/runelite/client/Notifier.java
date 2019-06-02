@@ -52,6 +52,7 @@ import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.FlashNotification;
 import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.ui.ClientUI;
@@ -61,6 +62,11 @@ import net.runelite.client.util.OSType;
 @Slf4j
 public class Notifier
 {
+	@Deprecated
+	String OLD_KEY_NAME = "notificationFlash";
+	@Deprecated
+	String NEW_KEY_NAME = "flashNotification";
+
 	// Default timeout of notification in milliseconds
 	private static final int DEFAULT_TIMEOUT = 10000;
 	private static final String DOUBLE_QUOTE = "\"";
@@ -83,6 +89,7 @@ public class Notifier
 	private final boolean terminalNotifierAvailable;
 	private Instant flashStart;
 	private long mouseLastPressedMillis;
+	private final ConfigManager configManager;
 
 	@Inject
 	private Notifier(
@@ -91,7 +98,8 @@ public class Notifier
 		final RuneLiteConfig runeliteConfig,
 		final RuneLiteProperties runeLiteProperties,
 		final ScheduledExecutorService executorService,
-		final ChatMessageManager chatMessageManager)
+		final ChatMessageManager chatMessageManager,
+		final ConfigManager configManager)
 	{
 		this.client = client;
 		this.appName = runeLiteProperties.getTitle();
@@ -99,6 +107,7 @@ public class Notifier
 		this.runeLiteConfig = runeliteConfig;
 		this.executorService = executorService;
 		this.chatMessageManager = chatMessageManager;
+		this.configManager = configManager;
 		this.notifyIconPath = RuneLite.RUNELITE_DIR.toPath().resolve("icon.png");
 
 		// First check if we are running in launcher
@@ -111,6 +120,7 @@ public class Notifier
 
 	public void notify(String message)
 	{
+		migrateFlashNotification();
 		notify(message, TrayIcon.MessageType.NONE);
 	}
 
@@ -369,5 +379,35 @@ public class Notifier
 			default:
 				return "normal";
 		}
+	}
+
+	/**
+	 * Migrates the old flash notification config to the new one so as to preserve previous behaviour.
+	 * This method should be removed after a reasonable amount of time.
+	 *
+	 * Minor visual bug: If the user has the Runelite config panel open at the time that it updates it will visually
+	 * appear to be unchanged even though the value has correctly updated. The config panel will correct itself
+	 * when it is next selected from the plugin list.
+	 */
+	@Deprecated
+	private void migrateFlashNotification()
+	{
+		String oldValue = configManager.getConfiguration(RuneLiteConfig.CONFIG_GROUP, OLD_KEY_NAME);
+
+		if (oldValue == null)
+		{
+			return;
+		}
+
+		if (oldValue.equals("false"))
+		{
+			configManager.setConfiguration(RuneLiteConfig.CONFIG_GROUP, NEW_KEY_NAME, FlashNotification.DISABLED);
+		}
+		else
+		{
+			configManager.setConfiguration(RuneLiteConfig.CONFIG_GROUP, NEW_KEY_NAME, FlashNotification.FLASH_TWO_SECONDS);
+		}
+
+		configManager.unsetConfiguration(RuneLiteConfig.CONFIG_GROUP, OLD_KEY_NAME);
 	}
 }
